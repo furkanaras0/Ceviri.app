@@ -2,6 +2,7 @@ import os
 import re
 from typing import List, Dict, Any, Tuple, Optional
 import pymupdf
+from src.paths import get_app_dir
 
 
 def clean_text(text: str) -> str:
@@ -129,7 +130,7 @@ def extract_paragraphs_from_pdf(
     # Görsellerin kaydedileceği dizin: data/extracted_images/<pdf_adi>/
     images_dir = ""
     if extract_images:
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root_dir = get_app_dir()
         images_dir = os.path.join(root_dir, "data", "extracted_images", re.sub(r'\W+', '_', base_name))
         os.makedirs(images_dir, exist_ok=True)
 
@@ -293,7 +294,7 @@ def prepare_scanned_pdf_pages(pdf_path: str) -> List[Dict[str, Any]]:
     """
     doc = pymupdf.open(pdf_path)
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_dir = get_app_dir()
     scanned_dir = os.path.join(root_dir, "data", "scanned_pages", re.sub(r'\W+', '_', base_name))
     os.makedirs(scanned_dir, exist_ok=True)
 

@@ -2,9 +2,16 @@ import sys
 import os
 
 # Proje kök dizinini sys.path'e ekle
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+# Çalışma dizinini uygulama kök dizinine sabitle
+os.chdir(BASE_DIR)
 
 # pythonw.exe ile çalışırken terminal olmadığı için sys.stdout None olabilir; hata almamak için yönlendir
 if sys.stdout is None:

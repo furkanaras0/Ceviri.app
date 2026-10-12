@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, Callable
 import docx
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from src.paths import get_app_dir
 
 
 def sanitize_xml_text(text: str) -> str:
@@ -24,7 +25,7 @@ def get_default_output_path(pdf_path: str, suffix: str = "_cevrilmis.docx") -> s
     output_filename = f"{base_name}{suffix}"
 
     try:
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root_dir = get_app_dir()
         output_dir = os.path.join(root_dir, "çevrilmiş")
         os.makedirs(output_dir, exist_ok=True)
         if os.path.isdir(output_dir):

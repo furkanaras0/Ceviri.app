@@ -219,7 +219,8 @@ class HistoryWindow(ctk.CTkToplevel):
             return
 
         # Kullanıcıdan kayıt yeri iste ('çevrilmiş' klasörünü varsayılan olarak öner)
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from src.paths import get_app_dir
+        root_dir = get_app_dir()
         default_dir = os.path.join(root_dir, "çevrilmiş")
         os.makedirs(default_dir, exist_ok=True)
 
@@ -248,7 +249,8 @@ class HistoryWindow(ctk.CTkToplevel):
             )
             
             if messagebox.askyesno("Başarılı", f"Word belgesi oluşturuldu:\n{saved_path}\n\nDosyayı şimdi açmak ister misiniz?"):
-                os.startfile(saved_path)
+                from src.paths import open_file_or_folder
+                open_file_or_folder(saved_path)
         except Exception as e:
             messagebox.showerror("Hata", f"Dışa aktarma başarısız:\n{str(e)}")
 

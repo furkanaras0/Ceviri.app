@@ -2,13 +2,14 @@ import sqlite3
 import os
 import json
 from typing import Optional, List, Dict, Any
+from src.paths import get_app_dir
 
 DEFAULT_DB_NAME = "translator_data.db"
 
 
 def get_db_path(db_name: str = DEFAULT_DB_NAME) -> str:
     """Veritabanının data/ klasöründe bulunmasını sağlar ve yolunu döndürür."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = get_app_dir()
     data_dir = os.path.join(base_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, db_name)

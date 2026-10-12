@@ -17,12 +17,17 @@ env.bak/
 venv.bak/
 
 # ==========================================
-# PyInstaller & Derleme Çıktıları
+# PyInstaller, Derleme & Büyük Arşivler
 # ==========================================
 build/
 dist/
 *.egg-info/
 *.spec
+*.exe
+*.zip
+*.tar.gz
+*.rar
+*.7z
 
 # ==========================================
 # Yerel Veritabanı ve Çalışma Önbellekleri
@@ -30,9 +35,9 @@ dist/
 data/*.db
 data/*.db-journal
 data/*.sqlite*
-data/extracted_images/*
-data/scanned_pages/*
-data/test_imgs/*
+data/extracted_images/
+data/scanned_pages/
+data/test_imgs/
 !data/.gitkeep
 
 # ==========================================
@@ -67,11 +72,14 @@ secrets.json
 *.swo
 
 # ==========================================
-# İşletim Sistemi Dosyaları
+# İşletim Sistemi Dosyaları (Windows & macOS)
 # ==========================================
 Thumbs.db
 desktop.ini
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
 # ==========================================
 # Log Dosyaları

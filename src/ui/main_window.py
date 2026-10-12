@@ -12,6 +12,7 @@ from src import pdf_parser
 from src import translator
 from src import doc_exporter
 from src import image_translator
+from src.paths import get_app_dir, open_file_or_folder
 from src.ui.history_window import HistoryWindow
 
 # CustomTkinter Temel Görünüm Ayarları
@@ -623,7 +624,7 @@ class AcademicTranslatorApp(ctk.CTk):
         
         # Seçilen PDF dosyasını ana dizini kirletmemesi için 'çevrilen' klasörüne arşivle
         try:
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            root_dir = get_app_dir()
             cevrilen_dir = os.path.join(root_dir, "çevrilen")
             os.makedirs(cevrilen_dir, exist_ok=True)
             target_path = os.path.join(cevrilen_dir, file_name)
@@ -803,7 +804,7 @@ class AcademicTranslatorApp(ctk.CTk):
                                     x1, y1 = int(xmax * p_w / 1000.0), int(ymax * p_h / 1000.0)
                                     if (x1 - x0) > 60 and (y1 - y0) > 40:
                                         fig_crop = page_pil.crop((x0, y0, x1, y1))
-                                        ext_dir = os.path.join("data", "extracted_images", re.sub(r'\W+', '_', file_name))
+                                        ext_dir = os.path.join(get_app_dir(), "data", "extracted_images", re.sub(r'\W+', '_', file_name))
                                         os.makedirs(ext_dir, exist_ok=True)
                                         crop_path = os.path.join(ext_dir, f"fig_p{current_num}_{p_idx}.png")
                                         fig_crop.save(crop_path)
@@ -1024,7 +1025,7 @@ class AcademicTranslatorApp(ctk.CTk):
     def _open_output_doc(self):
         if self.last_exported_docx and os.path.exists(self.last_exported_docx):
             try:
-                os.startfile(self.last_exported_docx)
+                open_file_or_folder(self.last_exported_docx)
             except Exception as e:
                 messagebox.showerror("Hata", f"Dosya açılamadı:\n{str(e)}")
 
@@ -1032,6 +1033,6 @@ class AcademicTranslatorApp(ctk.CTk):
         if self.last_exported_docx and os.path.exists(self.last_exported_docx):
             try:
                 folder = os.path.dirname(os.path.abspath(self.last_exported_docx))
-                os.startfile(folder)
+                open_file_or_folder(folder)
             except Exception as e:
                 messagebox.showerror("Hata", f"Klasör açılamadı:\n{str(e)}")
