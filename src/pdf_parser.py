@@ -106,25 +106,72 @@ def sort_blocks_academic_order(blocks: List[Tuple], page_rect: pymupdf.Rect) -> 
     return top_spanning + left_column + right_column + bottom_spanning
 
 
+def get_pdf_page_count(pdf_path: str) -> int:
+    """PDF dosyasının toplam sayfa sayısını döndürür."""
+    try:
+        doc = pymupdf.open(pdf_path)
+        count = len(doc)
+        doc.close()
+        return count
+    except Exception:
+        return 0
+
+
+def parse_page_range(range_str: Optional[str], total_pages: int) -> List[int]:
+    """
+    Kullanıcının girdiği sayfa aralığı metnini (örn: '1-5', '1, 3, 5-8', 'Tümü') 0-indeksli sayfa listesine dönüştürür.
+    Geçersiz veya boş girişlerde tüm sayfaları döndürür.
+    """
+    if not range_str or not range_str.strip():
+        return list(range(total_pages))
+
+    s = range_str.strip().lower()
+    if s in ["tümü", "all", "*", "hepsi"]:
+        return list(range(total_pages))
+
+    selected = set()
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+
+    for part in parts:
+        if "-" in part:
+            bounds = part.split("-")
+            if len(bounds) == 2:
+                try:
+                    start = int(bounds[0].strip())
+                    end = int(bounds[1].strip())
+                    if start <= end:
+                        for p in range(start, end + 1):
+                            if 1 <= p <= total_pages:
+                                selected.add(p - 1)
+                except ValueError:
+                    continue
+        else:
+            try:
+                p = int(part)
+                if 1 <= p <= total_pages:
+                    selected.add(p - 1)
+            except ValueError:
+                continue
+
+    if not selected:
+        return list(range(total_pages))
+
+    return sorted(list(selected))
+
+
 def extract_paragraphs_from_pdf(
     pdf_path: str,
     min_words: int = 10,
-    extract_images: bool = True
+    extract_images: bool = True,
+    page_range_str: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    PDF dosyasını açar, çift sütunlu akademik düzeni çözerek sayfa numaralarını ve parazitleri ayıklar.
-    Sayfadaki grafikleri ve şekilleri koordinatlarından kesip ilgili paragrafla eşleştirir.
-    
-    Dönüş formatı:
-    [
-        {
-            "text": "Paragraf metni...",
-            "images": ["data/extracted_images/makale/img_1.png", ...]
-        },
-        ...
-    ]
+    PDF dosyasını açar, belirtilen sayfa aralığında çift sütunlu akademik düzeni çözerek
+    sayfa numaralarını ve parazitleri ayıklar.
     """
     doc = pymupdf.open(pdf_path)
+    total_doc_pages = len(doc)
+    target_pages = parse_page_range(page_range_str, total_doc_pages)
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
     
     # Görsellerin kaydedileceği dizin: data/extracted_images/<pdf_adi>/
@@ -138,7 +185,7 @@ def extract_paragraphs_from_pdf(
     pending_caption: str = ""
     pending_images: List[str] = []
 
-    for page_idx in range(len(doc)):
+    for page_idx in target_pages:
         page = doc[page_idx]
         page_rect = page.rect
         blocks = page.get_text("blocks")
@@ -282,17 +329,18 @@ def extract_paragraphs_from_pdf(
 
     # Eğer metin bulunamadıysa (vektörel çizim veya taranmış PDF ise) AI Görsel Moduna geç
     if not final_paragraphs:
-        return prepare_scanned_pdf_pages(pdf_path)
+        return prepare_scanned_pdf_pages(pdf_path, target_pages)
 
     return final_paragraphs
 
 
-def prepare_scanned_pdf_pages(pdf_path: str) -> List[Dict[str, Any]]:
+def prepare_scanned_pdf_pages(pdf_path: str, target_pages: Optional[List[int]] = None) -> List[Dict[str, Any]]:
     """
     Eğer PDF içinde doğrudan okunabilir metin yoksa (vektörel eğri veya taranmış resimse),
-    her sayfayı yüksek çözünürlükte PNG olarak kaydeder ve AI Vision moduna hazırlar.
+    belirtilen sayfaları yüksek çözünürlükte PNG olarak kaydeder ve AI Vision moduna hazırlar.
     """
     doc = pymupdf.open(pdf_path)
+    pages_to_process = target_pages if target_pages is not None else list(range(len(doc)))
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
     root_dir = get_app_dir()
     scanned_dir = os.path.join(root_dir, "data", "scanned_pages", re.sub(r'\W+', '_', base_name))
@@ -300,7 +348,7 @@ def prepare_scanned_pdf_pages(pdf_path: str) -> List[Dict[str, Any]]:
 
     vision_chunks: List[Dict[str, Any]] = []
 
-    for page_idx in range(len(doc)):
+    for page_idx in pages_to_process:
         page = doc[page_idx]
         pix = page.get_pixmap(dpi=150)
         img_filename = f"page_{page_idx+1}.png"

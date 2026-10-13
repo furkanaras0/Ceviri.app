@@ -16,14 +16,14 @@ os.chdir(BASE_DIR)
 # pythonw.exe ile çalışırken terminal olmadığı için sys.stdout None olabilir; hata almamak için yönlendir
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
-
+from src.logger import install_crash_reporter, logger
 from src.ui.main_window import AcademicTranslatorApp
 
 
 def main():
     """Uygulamanın ana giriş noktası."""
+    install_crash_reporter()
+    logger.info("TranslAI Academic Translator Studio başlatılıyor...")
     app = AcademicTranslatorApp()
     app.mainloop()
 

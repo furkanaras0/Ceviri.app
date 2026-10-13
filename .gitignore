@@ -85,3 +85,4 @@ desktop.ini
 # Log Dosyaları
 # ==========================================
 *.log
+logs/

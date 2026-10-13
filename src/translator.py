@@ -2,8 +2,12 @@ import time
 import json
 import requests
 from typing import Optional, Tuple, Callable, List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from google import genai
 from google.genai import types
+
+from src import database
+from src.logger import logger
 
 # Akademik Çeviri için Standart Sistem Talimatı (Prompt)
 ACADEMIC_SYSTEM_PROMPT = (
@@ -41,29 +45,54 @@ class TranslationEngine:
         self.model_name = model_name.strip()
         self.base_url = (base_url or "").strip()
 
-    def translate_single_chunk(self, text: str, max_retries: int = 4, base_delay: float = 2.0) -> str:
+    def get_system_prompt_with_glossary(self) -> str:
+        """Sözlükteki özel terimleri sistem talimatına ekler."""
+        glossary_text = database.format_glossary_for_prompt()
+        if glossary_text:
+            return f"{ACADEMIC_SYSTEM_PROMPT}\n\n{glossary_text}"
+        return ACADEMIC_SYSTEM_PROMPT
+
+    def translate_single_chunk(
+        self,
+        text: str,
+        max_retries: int = 4,
+        base_delay: float = 2.0,
+        use_cache: bool = True
+    ) -> Tuple[str, bool]:
         """
-        Tek bir metin bloğunu seçilen sağlayıcı üzerinden çevirir.
-        429 (Rate Limit) veya geçici ağ hatalarında üstel geri çekilme (exponential backoff) uygular.
+        Tek bir metin bloğunu çevirir.
+        Dönüş: (translated_text, is_cached)
         """
         if not text or not text.strip():
-            return ""
+            return "", False
+
+        # 1. Önbellek Kontrolü (SHA-256)
+        if use_cache:
+            cached = database.get_cached_translation(text, self.model_name)
+            if cached:
+                return cached, True
 
         last_error = None
         for attempt in range(max_retries):
             try:
                 if self.provider == "gemini":
-                    return self._call_gemini(text)
+                    translated = self._call_gemini(text)
                 elif self.provider in ["openai", "openai_compatible", "custom"]:
-                    return self._call_openai_compatible(text)
+                    translated = self._call_openai_compatible(text)
                 else:
                     raise ValueError(f"Desteklenmeyen sağlayıcı: {self.provider}")
+
+                # Önbelleğe kaydet
+                if use_cache and translated:
+                    database.set_cached_translation(text, translated, self.model_name)
+
+                return translated, False
 
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
                 is_rate_limit = "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "too many requests" in err_str
-                
+
                 if attempt < max_retries - 1:
                     wait_time = base_delay * (2 ** attempt)
                     if is_rate_limit:
@@ -77,8 +106,9 @@ class TranslationEngine:
     def _call_gemini(self, text: str) -> str:
         """Google GenAI SDK kullanarak Gemini modellerini çağırır."""
         client = genai.Client(api_key=self.api_key)
+        system_instruction = self.get_system_prompt_with_glossary()
         config = types.GenerateContentConfig(
-            system_instruction=ACADEMIC_SYSTEM_PROMPT,
+            system_instruction=system_instruction,
             temperature=0.1,
         )
 
@@ -108,11 +138,11 @@ class TranslationEngine:
         """
         Vektörel çizim veya taranmış bir sayfa görselini multimodal yapay zeka ile okur,
         akademik sırayla paragrafları çıkarıp Türkçeye çevirir.
-        Dönüş: [{'source': '...', 'translated': '...'}, ...]
         """
         with open(image_path, "rb") as f:
             img_bytes = f.read()
 
+        glossary_note = database.format_glossary_for_prompt()
         prompt = (
             "You are an expert academic translator specializing in scholarly literature.\n"
             "Read the academic text from this page image in correct academic reading order.\n"
@@ -120,6 +150,7 @@ class TranslationEngine:
             "Strict Rules:\n"
             "1. Preserve citations ([1], [2], names, dates) and math symbols.\n"
             "2. If an item is a Figure, Diagram, Chart, or Table, provide its outer visual bounding box coordinates: 'figure_box': [ymin, xmin, ymax, xmax] normalized from 0 to 1000 so the visual diagram can be cleanly cropped.\n"
+            f"{glossary_note}\n"
             "3. Return ONLY a valid JSON array of objects in this exact format:\n"
             "[\n"
             '  {"source": "Original English text...", "translated": "Türkçe akademik çevirisi...", "figure_box": [ymin, xmin, ymax, xmax]}\n'
@@ -129,7 +160,6 @@ class TranslationEngine:
 
         last_error = None
         candidate_models = [self.model_name, "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.7-flash"]
-        # Tekrarları temizle
         models_to_try = []
         for m in candidate_models:
             if m and m not in models_to_try:
@@ -177,7 +207,7 @@ class TranslationEngine:
         raise RuntimeError(f"Sayfa görseli çevrilemedi: {last_error}")
 
     def _call_openai_compatible(self, text: str) -> str:
-        """OpenAI uyumlu REST uç noktalarını (DeepSeek, OpenAI, Groq, Ollama vb.) çağırır."""
+        """OpenAI uyumlu REST uç noktalarını çağırır."""
         url = self.base_url.rstrip("/") if self.base_url else "https://api.openai.com/v1"
         if not url.endswith("/chat/completions"):
             url = f"{url}/chat/completions"
@@ -187,10 +217,11 @@ class TranslationEngine:
             "Authorization": f"Bearer {self.api_key}",
         }
 
+        system_instruction = self.get_system_prompt_with_glossary()
         payload = {
             "model": self.model_name,
             "messages": [
-                {"role": "system", "content": ACADEMIC_SYSTEM_PROMPT},
+                {"role": "system", "content": system_instruction},
                 {"role": "user", "content": text},
             ],
             "temperature": 0.1,
@@ -208,9 +239,9 @@ class TranslationEngine:
         """API anahtarını ve model erişimini test eder."""
         test_text = "This is a test of the academic translation system."
         try:
-            result = self.translate_single_chunk(test_text, max_retries=2, base_delay=1.0)
+            result, _ = self.translate_single_chunk(test_text, max_retries=2, base_delay=1.0, use_cache=False)
             if result:
-                return True, f"Bağlantı başarılı! Model yanıt verdi."
+                return True, "Bağlantı başarılı! Model yanıt verdi."
             return False, "API boş yanıt döndürdü."
         except Exception as e:
             return False, f"Bağlantı hatası: {str(e)}"
